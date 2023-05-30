@@ -99,3 +99,223 @@ eumtpd %>% filter(treatment == "Pasture") %>%
   select(-(treatment:depth)) %>% 
   cor() %>% corrplot::corrplot.mixed(upper = "ellipse",lower = "number",lower.col = "black")
 ```
+
+```{r}
+library(readxl)
+library(tidyverse)
+library(geobr)
+library(skimr)
+library(tidymodels)
+library(ISLR)
+library(modeldata)
+library(vip)
+library(ggpubr)
+```
+
+```{r}
+readxl::excel_sheets("data/Dados_mestrado_RF.xlsx")
+dados <- read_xlsx("data/Dados_mestrado_RF.xlsx",
+                   sheet = "RF_eu_corr") %>% 
+  janitor::clean_names()
+glimpse(dados)
+```
+
+```{r}
+visdat::vis_miss(dados)
+```
+
+```{r}
+data_set_ml <- dados
+fco2_initial_split <- initial_split(data_set_ml, prop = 0.70)
+```
+
+
+```{r}
+fco2_train <- training(fco2_initial_split)
+fco2_train  %>% 
+  ggplot(aes(x=fco2, y=..density..))+
+  geom_histogram(bins = 30, color="black",  fill="lightgray")+
+  geom_density(alpha=.05,fill="red")+
+  theme_bw() +
+  labs(x="FCO2", y = "Densidade")
+```
+
+## Data-prep
+
+```{r}
+fco2_rf_recipe <- recipe(fco2 ~ ., data = fco2_train %>% 
+                        select(-c(data:id_ponto,nstock,precipitation))
+) %>%  
+  step_normalize(all_numeric_predictors())  #%>% 
+  #step_novel(all_nominal_predictors()) %>% 
+  #step_zv(all_predictors()) %>%
+  #step_naomit(c(Ts, Us)) %>% 
+  #step_impute_mean(c(Us,Ts)) %>% 
+  #step_poly(c(ms,ts), degree = 5)  
+  #step_dummy(all_nominal_predictors())
+bake(prep(fco2_rf_recipe), new_data = NULL)
+```
+
+```{r}
+fco2_resamples_rf <- vfold_cv(fco2_train, v = 5)
+grid <- grid_regular(
+  penalty(range = c(-10, -2)),
+  levels = 40
+)
+```
+
+
+## Modelo
+
+```{r}
+fco2_rf_model <- rand_forest(
+  min_n = tune(),
+  mtry = tune(),
+  trees = tune()
+)   %>%  
+  set_mode("regression")  %>% 
+  set_engine("randomForest")
+```
+
+## Workflow
+
+```{r}
+fco2_rf_wf <- workflow()   %>%  
+  add_model(fco2_rf_model) %>%  
+  add_recipe(fco2_rf_recipe)
+```
+
+## Tune
+
+```{r}
+grid_rf <- grid_random(
+  min_n(range = c(2, 30)),
+  mtry(range = c(2,15)),
+  trees(range = c(250,970)),
+  size = 50
+)
+
+fco2_rf_tune_grid <- tune_grid(
+ fco2_rf_wf,
+  resamples = fco2_resamples_rf,
+  grid = grid_rf,
+  metrics = metric_set(rmse)
+) 
+autoplot(fco2_rf_tune_grid)
+```
+
+```{r}
+collect_metrics(fco2_rf_tune_grid)
+```
+
+```{r}
+fco2_rf_best_params <- select_best(fco2_rf_tune_grid, "rmse")
+fco2_rf_wf <- fco2_rf_wf %>% finalize_workflow(fco2_rf_best_params)
+fco2_rf_last_fit <- last_fit(fco2_rf_wf, fco2_initial_split)
+
+fco2_test_preds <- bind_rows(
+  collect_predictions(fco2_rf_last_fit)  %>%   mutate(modelo = "rf")
+)
+
+"
+mtry 2 
+<int>
+trees 891
+<int>
+min_n 16
+"
+```
+
+
+```{r}
+fco2_test_preds %>% 
+  ggplot(aes(x=.pred, y=fco2)) +
+  geom_point()+
+  theme_bw() +
+  geom_smooth(method = "lm") +
+  stat_regline_equation(ggplot2::aes(
+  label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) 
+```
+
+
+```{r}
+fco2_rf_last_fit_model <-fco2_rf_last_fit$.workflow[[1]]$fit$fit
+vip(fco2_rf_last_fit_model)
+```
+
+```{r}
+da <- fco2_test_preds %>% 
+  filter(fco2 > 0, .pred> 0 )
+
+my_rmse <- Metrics::rmse(da$fco2,
+                         da$.pred)
+my_mape <- Metrics::mape(da$fco2,da$.pred)*100
+
+fco2_test_preds %>% 
+  ggplot(aes(x=fco2,y=.pred))+
+  geom_point()+
+  geom_smooth(method = "lm")+
+  stat_regline_equation(ggplot2::aes(
+    label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~")),size=5)+
+  ggplot2::annotate('text',x=10.4,y=10,label=paste0('RMSE = ',round(my_rmse,2),'\nMAPE = '
+                                                      ,round(my_mape,2),'%'),size=5)+
+  theme_bw()
+```
+
+```{r}
+final_wf <- fco2_rf_last_fit %>%
+  extract_workflow()
+final_wf
+```
+
+```{r}
+externo <- read_xlsx("data/Modelagem_RF.xlsx") %>% 
+  janitor::clean_names() %>% 
+  filter(treatment == "Eucalyptus") %>% 
+  select(date, id, fco2, ts, ms, p, cec, cstock, micro, humidity)
+externo$rep <- rep(rep(1:6,rep(3,6)),6)
+glimpse(externo)
+```
+
+
+```{r}
+externo <-inner_join(externo,
+
+           dados %>%
+             filter(data == as.Date("2015-11-07")) %>%
+             sample_n(18,replace = TRUE) %>%
+             mutate(id = row_number()) %>%
+             select(id, hlif_sx_ds),
+
+           by="id") %>% select(-(id))
+```
+
+
+```{r}
+externo <- externo %>% 
+  group_by( date, rep) %>% 
+  summarise(
+    fco2 = mean(fco2,na.rm=TRUE),
+    ts = mean(ts,na.rm=TRUE),
+    ms = mean(ms,na.rm=TRUE),
+    p = mean(p,na.rm=TRUE),
+    cec = mean(cec,na.rm=TRUE),
+    cstock = mean(cstock,na.rm=TRUE),
+    micro = mean(micro,na.rm=TRUE),
+    humidity = mean(humidity,na.rm=TRUE),
+    hlif_sx_ds = mean(humidity,na.rm=TRUE)
+  )
+
+```
+
+
+```{r}
+obs <- externo$fco2
+pred <- predict(final_wf, externo)
+
+cbind(pred, obs) %>% #filter(.pred <=3.75) %>% 
+  ggplot(aes(x=.pred, y=obs)) +
+  geom_point()  +
+  geom_smooth(method = "lm")
+```
+
