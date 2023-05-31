@@ -210,19 +210,19 @@ fco2_rf_recipe <- recipe(fco2 ~ ., data = fco2_train %>%
   #step_dummy(all_nominal_predictors())
 bake(prep(fco2_rf_recipe), new_data = NULL)
 #> # A tibble: 350 x 9
-#>        ts      ms      p      cec hlif_sx_ds cstock   micro humidity  fco2
-#>     <dbl>   <dbl>  <dbl>    <dbl>      <dbl>  <dbl>   <dbl>    <dbl> <dbl>
-#>  1  0.412 -1.33   -0.158 -1.37        0.272  -0.245  0.153    -0.413  8.52
-#>  2 -0.609  1.18    0.643  0.00938     0.0776 -0.245  1.24      0.869  7.48
-#>  3 -0.516  0.0405 -0.158 -0.303      -0.370   0.659  1.02      0.490  5.92
-#>  4  1.43  -0.188   1.04   0.789      -0.637  -0.245 -0.800    -2.05   5.04
-#>  5 -0.238 -0.645  -1.76  -1.73        2.03   -1.69   0.513     0.335  3.09
-#>  6  0.691 -0.417   0.643  0.111      -0.818   0.297 -1.25     -1.21   5.04
-#>  7 -0.516  0.0405 -0.158  0.328      -0.148   0.297  0.371     0.170  7.08
-#>  8  1.71  -0.874  -1.36  -1.52        2.01   -1.87   0.582    -2.05   1.71
-#>  9  0.969 -0.417   1.04   0.898      -0.931   1.20   0.0142   -1.21   9.28
-#> 10  0.226  0.269  -0.158  0.328      -0.148   0.297  0.371     0.490 12.3 
-#> # ... with 340 more rows
+#>           ts      ms      p     cec hlif_sx_ds cstock   micro humidity  fco2
+#>        <dbl>   <dbl>  <dbl>   <dbl>      <dbl>  <dbl>   <dbl>    <dbl> <dbl>
+#>  1 -0.668    -0.832   1.44   1.54       -1.38   1.87  -0.983     0.319  4.61
+#>  2  0.000956  0.878  -1.81  -1.73        2.14  -1.77   0.482     1.56   2.97
+#>  3  0.383    -0.405   1.04   0.838      -0.947  1.14  -0.0119    0.319  7.65
+#>  4 -0.955     0.878  -0.181 -0.339      -0.363  0.592  0.984     0.846  6.21
+#>  5 -0.572     1.95   -0.587 -0.312       0.394 -0.864  0.372     0.846  3.92
+#>  6  0.000956 -0.405  -1.81  -1.54        2.73  -2.14   0.791    -0.908  2.36
+#>  7  0.000956  0.0229  0.631  0.0671     -0.830  0.228 -1.26     -0.420  5.85
+#>  8 -0.190     1.09   -1.81  -1.54        2.73  -2.14   0.791    -1.29   3.75
+#>  9  0.383     1.31   -0.587 -0.312       0.394 -0.864  0.372     0.472  4.08
+#> 10 -0.381     0.451   1.04   0.838      -0.947  1.14  -0.0119    1.56  10.2 
+#> # i 340 more rows
 ```
 
 ``` r
@@ -277,14 +277,14 @@ autoplot(fco2_dt_tune_grid)
 ``` r
 collect_metrics(fco2_dt_tune_grid)
 #> # A tibble: 5 x 9
-#>   cost_complexity tree_depth min_n .metric .estima~1  mean     n std_err .config
-#>             <dbl>      <int> <int> <chr>   <chr>     <dbl> <int>   <dbl> <chr>  
-#> 1        6.66e- 8          7    15 rmse    standard   1.72     5  0.0570 Prepro~
-#> 2        4.97e-11         17    35 rmse    standard   1.72     5  0.132  Prepro~
-#> 3        1.49e-20         27    21 rmse    standard   1.62     5  0.0646 Prepro~
-#> 4        7.85e- 8         25    13 rmse    standard   1.67     5  0.105  Prepro~
-#> 5        7.22e-17         17     5 rmse    standard   1.92     5  0.125  Prepro~
-#> # ... with abbreviated variable name 1: .estimator
+#>   cost_complexity tree_depth min_n .metric .estimator  mean     n std_err
+#>             <dbl>      <int> <int> <chr>   <chr>      <dbl> <int>   <dbl>
+#> 1        4.27e-15         13    17 rmse    standard    1.51     5  0.0750
+#> 2        1.01e- 2         29    15 rmse    standard    1.56     5  0.0877
+#> 3        3.44e-16         17    31 rmse    standard    1.53     5  0.0664
+#> 4        9.81e-18         10    22 rmse    standard    1.50     5  0.0713
+#> 5        1.98e-18         27    35 rmse    standard    1.60     5  0.0562
+#> # i 1 more variable: .config <chr>
 
 
 fco2_dt_best_params <- select_best(fco2_dt_tune_grid, "rmse")
@@ -316,14 +316,16 @@ vip(fco2_dt_last_fit_model)
 ![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ``` r
-
+cores <- RColorBrewer::brewer.pal(n = 3, name = "Set2")
 fco2_tree_mod <- extract_fit_engine(fco2_dt_last_fit)
-rpart.plot(fco2_tree_mod, roundint=FALSE, type = 4, extra = 1)
+rpart.plot(fco2_tree_mod, roundint=FALSE, type = 4, extra = 1,
+           cex=.6,
+           box.col = cores, #c("lightblue", "lightgreen", "lightyellow"),
+           shadow.col = "gray")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
-
-## Modelo Random Forest
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- --> \## Modelo
+Random Forest
 
 ``` r
 fco2_rf_model <- rand_forest(
@@ -369,17 +371,17 @@ collect_metrics(fco2_rf_tune_grid)
 #> # A tibble: 50 x 9
 #>     mtry trees min_n .metric .estimator  mean     n std_err .config             
 #>    <int> <int> <int> <chr>   <chr>      <dbl> <int>   <dbl> <chr>               
-#>  1    12   300    30 rmse    standard    1.52     5  0.0943 Preprocessor1_Model~
-#>  2     2   540     2 rmse    standard    1.45     5  0.0689 Preprocessor1_Model~
-#>  3    15   479    15 rmse    standard    1.49     5  0.0710 Preprocessor1_Model~
-#>  4     5   657    10 rmse    standard    1.47     5  0.0703 Preprocessor1_Model~
-#>  5    10   721     3 rmse    standard    1.49     5  0.0616 Preprocessor1_Model~
-#>  6     9   412    19 rmse    standard    1.50     5  0.0777 Preprocessor1_Model~
-#>  7     8   598     9 rmse    standard    1.48     5  0.0656 Preprocessor1_Model~
-#>  8     7   442    26 rmse    standard    1.51     5  0.0905 Preprocessor1_Model~
-#>  9     7   334    13 rmse    standard    1.48     5  0.0709 Preprocessor1_Model~
-#> 10     3   330    27 rmse    standard    1.50     5  0.0947 Preprocessor1_Model~
-#> # ... with 40 more rows
+#>  1    14   735     5 rmse    standard    1.41     5  0.0591 Preprocessor1_Model~
+#>  2     8   523    17 rmse    standard    1.41     5  0.0539 Preprocessor1_Model~
+#>  3     3   341    28 rmse    standard    1.41     5  0.0501 Preprocessor1_Model~
+#>  4     6   559     6 rmse    standard    1.40     5  0.0600 Preprocessor1_Model~
+#>  5     2   697    12 rmse    standard    1.37     5  0.0527 Preprocessor1_Model~
+#>  6     6   948    30 rmse    standard    1.41     5  0.0519 Preprocessor1_Model~
+#>  7    14   413    22 rmse    standard    1.42     5  0.0495 Preprocessor1_Model~
+#>  8    10   649    21 rmse    standard    1.41     5  0.0520 Preprocessor1_Model~
+#>  9    13   785    10 rmse    standard    1.40     5  0.0544 Preprocessor1_Model~
+#> 10    12   600    29 rmse    standard    1.42     5  0.0515 Preprocessor1_Model~
+#> # i 40 more rows
 ```
 
 ``` r
@@ -457,13 +459,13 @@ final_wf
 #> -- Model -----------------------------------------------------------------------
 #> 
 #> Call:
-#>  randomForest(x = maybe_data_frame(x), y = y, ntree = ~540L, mtry = min_cols(~2L,      x), nodesize = min_rows(~2L, x)) 
+#>  randomForest(x = maybe_data_frame(x), y = y, ntree = ~908L, mtry = min_cols(~3L,      x), nodesize = min_rows(~11L, x)) 
 #>                Type of random forest: regression
-#>                      Number of trees: 540
-#> No. of variables tried at each split: 2
+#>                      Number of trees: 908
+#> No. of variables tried at each split: 3
 #> 
-#>           Mean of squared residuals: 2.110281
-#>                     % Var explained: 52.06
+#>           Mean of squared residuals: 1.967496
+#>                     % Var explained: 55.74
 ```
 
 ``` r

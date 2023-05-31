@@ -236,13 +236,14 @@ vip(fco2_dt_last_fit_model)
 ```
 
 ```{r}
-
+cores <- RColorBrewer::brewer.pal(n = 3, name = "Set2")
 fco2_tree_mod <- extract_fit_engine(fco2_dt_last_fit)
-rpart.plot(fco2_tree_mod, roundint=FALSE, type = 4, extra = 1)
+rpart.plot(fco2_tree_mod, roundint=FALSE, type = 4, extra = 1,
+           cex=.6,
+           box.col = cores, #c("lightblue", "lightgreen", "lightyellow"),
+           shadow.col = "gray")
 
 ```
-
-
 ## Modelo Random Forest
 
 ```{r}
