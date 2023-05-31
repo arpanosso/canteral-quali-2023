@@ -110,6 +110,7 @@ library(ISLR)
 library(modeldata)
 library(vip)
 library(ggpubr)
+library(rpart.plot)
 ```
 
 ```{r}
@@ -165,7 +166,84 @@ grid <- grid_regular(
 ```
 
 
-## Modelo
+## Modelo Decision Tree
+```{r}
+fco2_dt_model <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune(),
+  min_n = tune()
+)  %>%  
+  set_mode("regression")  %>%  
+  set_engine("rpart")
+```
+
+```{r}
+fco2_dt_recipe <- fco2_rf_recipe
+
+fco2_dt_wf <- workflow()   %>%  
+  add_model(fco2_dt_model) %>% 
+  add_recipe(fco2_dt_recipe)
+```
+
+```{r}
+grid_dt <- grid_random(
+  cost_complexity(c(-20, -1)),
+  tree_depth(range = c(2, 30)),
+  min_n(range = c(2, 60)),
+  size = 5
+)
+```
+
+
+```{r}
+fco2_dt_tune_grid <- tune_grid(
+  fco2_dt_wf,
+  resamples = fco2_resamples_rf,
+  grid = grid_dt,
+  metrics = metric_set(rmse)
+)
+autoplot(fco2_dt_tune_grid)
+```
+
+```{r}
+collect_metrics(fco2_dt_tune_grid)
+
+
+fco2_dt_best_params <- select_best(fco2_dt_tune_grid, "rmse")
+fco2_dt_wf <- fco2_dt_wf %>% finalize_workflow(fco2_dt_best_params)
+fco2_dt_last_fit <- last_fit(fco2_dt_wf, fco2_initial_split)
+
+fco2_test_preds <- bind_rows(
+  collect_predictions(fco2_dt_last_fit)  %>%   mutate(modelo = "dt")
+)
+
+fco2_test <- testing(fco2_initial_split)
+
+fco2_test_preds %>% 
+  ggplot(aes(x=.pred, y=fco2)) +
+  geom_point()+
+  theme_bw() +
+  geom_smooth(method = "lm") +
+  stat_regline_equation(ggplot2::aes(
+  label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) 
+
+```
+
+
+```{r}
+fco2_dt_last_fit_model <-fco2_dt_last_fit$.workflow[[1]]$fit$fit
+vip(fco2_dt_last_fit_model)
+```
+
+```{r}
+
+fco2_tree_mod <- extract_fit_engine(fco2_dt_last_fit)
+rpart.plot(fco2_tree_mod, roundint=FALSE, type = 4, extra = 1)
+
+```
+
+
+## Modelo Random Forest
 
 ```{r}
 fco2_rf_model <- rand_forest(

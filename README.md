@@ -143,6 +143,7 @@ library(ISLR)
 library(modeldata)
 library(vip)
 library(ggpubr)
+library(rpart.plot)
 ```
 
 ``` r
@@ -209,19 +210,19 @@ fco2_rf_recipe <- recipe(fco2 ~ ., data = fco2_train %>%
   #step_dummy(all_nominal_predictors())
 bake(prep(fco2_rf_recipe), new_data = NULL)
 #> # A tibble: 350 x 9
-#>        ts     ms      p      cec hlif_sx_ds  cstock   micro humidity  fco2
-#>     <dbl>  <dbl>  <dbl>    <dbl>      <dbl>   <dbl>   <dbl>    <dbl> <dbl>
-#>  1  1.44  -0.864 -0.221  0.262       -0.106  0.211   0.368   -2.02    6.85
-#>  2 -2.64  -0.639  0.970  0.717       -0.608 -0.328  -0.802   -0.0277  9.13
-#>  3  0.143  0.262 -0.221  0.282       -0.499  0.750   0.376    0.153   4.4 
-#>  4 -0.454  0.713  1.37   1.53        -1.34   1.83   -0.968    0.836   9.65
-#>  5  1.83  -0.864  1.37   1.53        -1.34   1.83   -0.968    0.314   4.25
-#>  6 -0.653  0.488 -0.618  0.00848     -0.294  0.0313  0.0119   0.465   6.33
-#>  7 -0.454  1.61  -1.02  -0.459       -0.402 -0.688  -3.75     1.55    8.4 
-#>  8 -0.255 -1.31   0.970  0.824       -0.909  1.11    0.0118   0.465   9.72
-#>  9 -1.05  -1.54  -1.02  -1.47        -0.839 -0.328  -0.766    0.314   3.38
-#> 10  0.442 -0.639 -1.02  -0.539        1.01  -1.23    0.602   -1.19    3.69
-#> # i 340 more rows
+#>        ts      ms      p      cec hlif_sx_ds cstock   micro humidity  fco2
+#>     <dbl>   <dbl>  <dbl>    <dbl>      <dbl>  <dbl>   <dbl>    <dbl> <dbl>
+#>  1  0.412 -1.33   -0.158 -1.37        0.272  -0.245  0.153    -0.413  8.52
+#>  2 -0.609  1.18    0.643  0.00938     0.0776 -0.245  1.24      0.869  7.48
+#>  3 -0.516  0.0405 -0.158 -0.303      -0.370   0.659  1.02      0.490  5.92
+#>  4  1.43  -0.188   1.04   0.789      -0.637  -0.245 -0.800    -2.05   5.04
+#>  5 -0.238 -0.645  -1.76  -1.73        2.03   -1.69   0.513     0.335  3.09
+#>  6  0.691 -0.417   0.643  0.111      -0.818   0.297 -1.25     -1.21   5.04
+#>  7 -0.516  0.0405 -0.158  0.328      -0.148   0.297  0.371     0.170  7.08
+#>  8  1.71  -0.874  -1.36  -1.52        2.01   -1.87   0.582    -2.05   1.71
+#>  9  0.969 -0.417   1.04   0.898      -0.931   1.20   0.0142   -1.21   9.28
+#> 10  0.226  0.269  -0.158  0.328      -0.148   0.297  0.371     0.490 12.3 
+#> # ... with 340 more rows
 ```
 
 ``` r
@@ -232,7 +233,97 @@ grid <- grid_regular(
 )
 ```
 
-## Modelo
+## Modelo Decision Tree
+
+``` r
+fco2_dt_model <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune(),
+  min_n = tune()
+)  %>%  
+  set_mode("regression")  %>%  
+  set_engine("rpart")
+```
+
+``` r
+fco2_dt_recipe <- fco2_rf_recipe
+
+fco2_dt_wf <- workflow()   %>%  
+  add_model(fco2_dt_model) %>% 
+  add_recipe(fco2_dt_recipe)
+```
+
+``` r
+grid_dt <- grid_random(
+  cost_complexity(c(-20, -1)),
+  tree_depth(range = c(2, 30)),
+  min_n(range = c(2, 60)),
+  size = 5
+)
+```
+
+``` r
+fco2_dt_tune_grid <- tune_grid(
+  fco2_dt_wf,
+  resamples = fco2_resamples_rf,
+  grid = grid_dt,
+  metrics = metric_set(rmse)
+)
+autoplot(fco2_dt_tune_grid)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-22-1.png)<!-- -->
+
+``` r
+collect_metrics(fco2_dt_tune_grid)
+#> # A tibble: 5 x 9
+#>   cost_complexity tree_depth min_n .metric .estima~1  mean     n std_err .config
+#>             <dbl>      <int> <int> <chr>   <chr>     <dbl> <int>   <dbl> <chr>  
+#> 1        6.66e- 8          7    15 rmse    standard   1.72     5  0.0570 Prepro~
+#> 2        4.97e-11         17    35 rmse    standard   1.72     5  0.132  Prepro~
+#> 3        1.49e-20         27    21 rmse    standard   1.62     5  0.0646 Prepro~
+#> 4        7.85e- 8         25    13 rmse    standard   1.67     5  0.105  Prepro~
+#> 5        7.22e-17         17     5 rmse    standard   1.92     5  0.125  Prepro~
+#> # ... with abbreviated variable name 1: .estimator
+
+
+fco2_dt_best_params <- select_best(fco2_dt_tune_grid, "rmse")
+fco2_dt_wf <- fco2_dt_wf %>% finalize_workflow(fco2_dt_best_params)
+fco2_dt_last_fit <- last_fit(fco2_dt_wf, fco2_initial_split)
+
+fco2_test_preds <- bind_rows(
+  collect_predictions(fco2_dt_last_fit)  %>%   mutate(modelo = "dt")
+)
+
+fco2_test <- testing(fco2_initial_split)
+
+fco2_test_preds %>% 
+  ggplot(aes(x=.pred, y=fco2)) +
+  geom_point()+
+  theme_bw() +
+  geom_smooth(method = "lm") +
+  stat_regline_equation(ggplot2::aes(
+  label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) 
+```
+
+![](README_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+
+``` r
+fco2_dt_last_fit_model <-fco2_dt_last_fit$.workflow[[1]]$fit$fit
+vip(fco2_dt_last_fit_model)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+
+``` r
+
+fco2_tree_mod <- extract_fit_engine(fco2_dt_last_fit)
+rpart.plot(fco2_tree_mod, roundint=FALSE, type = 4, extra = 1)
+```
+
+![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+
+## Modelo Random Forest
 
 ``` r
 fco2_rf_model <- rand_forest(
@@ -271,24 +362,24 @@ fco2_rf_tune_grid <- tune_grid(
 autoplot(fco2_rf_tune_grid)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-21-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
 
 ``` r
 collect_metrics(fco2_rf_tune_grid)
 #> # A tibble: 50 x 9
 #>     mtry trees min_n .metric .estimator  mean     n std_err .config             
 #>    <int> <int> <int> <chr>   <chr>      <dbl> <int>   <dbl> <chr>               
-#>  1    10   968    15 rmse    standard    1.57     5  0.0529 Preprocessor1_Model~
-#>  2     8   544    28 rmse    standard    1.57     5  0.0469 Preprocessor1_Model~
-#>  3     3   811    28 rmse    standard    1.56     5  0.0451 Preprocessor1_Model~
-#>  4    13   902    28 rmse    standard    1.57     5  0.0501 Preprocessor1_Model~
-#>  5     5   357    19 rmse    standard    1.56     5  0.0488 Preprocessor1_Model~
-#>  6     4   275    12 rmse    standard    1.56     5  0.0461 Preprocessor1_Model~
-#>  7     8   566     6 rmse    standard    1.61     5  0.0508 Preprocessor1_Model~
-#>  8     4   465    25 rmse    standard    1.57     5  0.0491 Preprocessor1_Model~
-#>  9    15   611    22 rmse    standard    1.57     5  0.0475 Preprocessor1_Model~
-#> 10     3   764     4 rmse    standard    1.57     5  0.0461 Preprocessor1_Model~
-#> # i 40 more rows
+#>  1    12   300    30 rmse    standard    1.52     5  0.0943 Preprocessor1_Model~
+#>  2     2   540     2 rmse    standard    1.45     5  0.0689 Preprocessor1_Model~
+#>  3    15   479    15 rmse    standard    1.49     5  0.0710 Preprocessor1_Model~
+#>  4     5   657    10 rmse    standard    1.47     5  0.0703 Preprocessor1_Model~
+#>  5    10   721     3 rmse    standard    1.49     5  0.0616 Preprocessor1_Model~
+#>  6     9   412    19 rmse    standard    1.50     5  0.0777 Preprocessor1_Model~
+#>  7     8   598     9 rmse    standard    1.48     5  0.0656 Preprocessor1_Model~
+#>  8     7   442    26 rmse    standard    1.51     5  0.0905 Preprocessor1_Model~
+#>  9     7   334    13 rmse    standard    1.48     5  0.0709 Preprocessor1_Model~
+#> 10     3   330    27 rmse    standard    1.50     5  0.0947 Preprocessor1_Model~
+#> # ... with 40 more rows
 ```
 
 ``` r
@@ -320,14 +411,14 @@ fco2_test_preds %>%
   label =  paste(..eq.label.., ..rr.label.., sep = "*plain(\",\")~~"))) 
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
 
 ``` r
 fco2_rf_last_fit_model <-fco2_rf_last_fit$.workflow[[1]]$fit$fit
 vip(fco2_rf_last_fit_model)
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-32-1.png)<!-- -->
 
 ``` r
 da <- fco2_test_preds %>% 
@@ -348,7 +439,7 @@ fco2_test_preds %>%
   theme_bw()
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-33-1.png)<!-- -->
 
 ``` r
 final_wf <- fco2_rf_last_fit %>%
@@ -366,13 +457,13 @@ final_wf
 #> -- Model -----------------------------------------------------------------------
 #> 
 #> Call:
-#>  randomForest(x = maybe_data_frame(x), y = y, ntree = ~878L, mtry = min_cols(~2L,      x), nodesize = min_rows(~7L, x)) 
+#>  randomForest(x = maybe_data_frame(x), y = y, ntree = ~540L, mtry = min_cols(~2L,      x), nodesize = min_rows(~2L, x)) 
 #>                Type of random forest: regression
-#>                      Number of trees: 878
+#>                      Number of trees: 540
 #> No. of variables tried at each split: 2
 #> 
-#>           Mean of squared residuals: 2.296308
-#>                     % Var explained: 51.58
+#>           Mean of squared residuals: 2.110281
+#>                     % Var explained: 52.06
 ```
 
 ``` r
@@ -435,4 +526,4 @@ cbind(pred, obs) %>% #filter(.pred <=3.75) %>%
   geom_smooth(method = "lm")
 ```
 
-![](README_files/figure-gfm/unnamed-chunk-31-1.png)<!-- -->
+![](README_files/figure-gfm/unnamed-chunk-38-1.png)<!-- -->
